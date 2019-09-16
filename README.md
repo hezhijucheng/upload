@@ -32,7 +32,6 @@ require __DIR__ . "/upload/src/upload.php";
 ## 用法
 
 
-- **app唤起支付**
 
 ```php
 $upload_path="./upload2";//文件储存位置
