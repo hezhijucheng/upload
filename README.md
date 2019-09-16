@@ -47,6 +47,6 @@ $upload->apiReturn();
 
 - **效果图如下**
 
-
+![Image text](https://github.com/hezhijucheng/upload/blob/master/test/upload2/cf78a7a201de7f1c5e25d935cc0b78d0.jpg)
 
 
