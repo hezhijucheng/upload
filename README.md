@@ -13,7 +13,7 @@ upload采用composer进行安装，要使用upload功能，只需要在composer.
 ```json
 {
   "require": {
-    "jucheng/upload": "1.*"
+    "juchengit/upload": "1.*"
   }
 }
 ```
