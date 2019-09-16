@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"> 
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="http://apps.bdimg.com/libs/jquery/2.1.4/jquery.js" ></script>
+  <script src="js/browser-md5-file.min.js" ></script>
+ 
+<title> php+html5实现无刷新上传，大文件分片上传，断点续传</title>
+  <link rel="stylesheet" href="css/bootstrap.min.css">
+<style type="text/css">
+	 .demo{padding:2em 0;background:linear-gradient(to right,#2c3b4e,#4a688a,#2c3b4e)}
+.progress{height:25px;background:#262626;padding:5px;overflow:visible;border-radius:20px;border-top:1px solid #000;border-bottom:1px solid #7992a8;margin-top:50px}
+.progress .progress-bar{border-radius:20px;position:relative;animation:animate-positive 2s}
+.progress .progress-value{display:block;padding:3px 7px;font-size:13px;color:#fff;border-radius:4px;background:#191919;border:1px solid #000;position:absolute;top:-40px;right:-10px}
+.progress .progress-value:after{content:"";border-top:10px solid #191919;border-left:10px solid transparent;border-right:10px solid transparent;position:absolute;bottom:-6px;left:26%}
+.progress-bar.active{animation:reverse progress-bar-stripes .4s linear infinite,animate-positive 2s}
+@-webkit-keyframes animate-positive{0%{width:0}
+}
+@keyframes animate-positive{0%{width:0}
+}
+.a-upload{padding:4px 10px;height:20px;line-height:20px;position:relative;cursor:pointer;color:#888;background:#fafafa;border:1px solid #ddd;border-radius:4px;overflow:hidden;display:block;height:30px;width:150px}
+.a-upload input{position:absolute;font-size:100px;right:0;top:0;opacity:0;filter:alpha(opacity=0);cursor:pointer}
+.upload{margin-top:40px}
+.log{margin-top:40px;color:#fff}
+
+</style>
+  
+</head>
+<body>
+
+
+<div class="demo">
+	<div class="container">
+		<div class="row">
+			<div class="col-md-offset-3 col-md-6">
+				<div class="progress">
+					<div id="finish" class="progress-bar progress-bar-info progress-bar-striped active" style="width: 0%;">
+						<div id="rate" class="progress-value">0%</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+    <div class="container">
+        <div class="upload">
+           <a href="javascript：;" class="a-upload">
+                <input type="file" name="" id="file">点击这里上传文件
+            </a>
+        </div>
+        <div class="upload">
+        
+         <input class="btn btn-default" type="button" value="开始上传" id="upstart">
+          <input class="btn btn-success" type="button" value="停止" id="stop">
+          <input class="btn btn-warning" type="button" value="重新开始" id="restart">
+        
+        </div>
+        
+        <div class="log">
+        日志：<div id="divlog"></div>
+        </div>
+        
+    </div>
+    
+    
+    
+
+  
+</div>
+<script>
+
+  var fileForm = document.getElementById("file");
+  var upstartBtn = document.getElementById('upstart');
+  var stopBtn = document.getElementById('stop');
+  var startBtn = document.getElementById('restart');
+  var rate = document.getElementById('rate');
+  var divlog = document.getElementById('divlog');
+  //---------------------------
+  const LENGTH = 1024 * 1024 * 10;
+  var start = 0;
+  var end = start + LENGTH;
+  var blob;
+  var blob_num = 1;
+  var is_stop = 0
+  var file = null;  
+  var md5filename = '';
+  var is_upload=0;
+  
+  //-----------------------------
+  var upload_instance = new Upload();
+   
+  fileForm.onchange = function()
+  {
+      is_upload=1;
+      if(fileForm.files[0].size>1021000000){
+          alert("文件超过1G,太大了请重新上传");
+          return;
+      }
+      divlog.innerHTML="正在计算文件MD5值请稍等！";
+    browserMD5File(fileForm.files[0], function (err, md5) { //如果文件大，md5值生成较慢  md5值生成后才能上传处理，自己优化下吧
+        if(md5!=md5filename){
+            console.log("上传文件不是上次文件，重新计算md5值以及分片");
+            md5filename = md5;                                  //如果需要刷新后也能断点，可利用cookie记录，自行完善   536135688
+            blob_num=1;
+            divlog.innerHTML = '文件md5为：' + md5filename;
+            document.getElementById('finish').style.width=0;
+
+            rate.innerHTML=0;
+        }else{
+            console.log("重新上传文件没有变化");
+        }
+
+
+    });
+  } 
+  upstartBtn.onclick = function(){
+    upload_instance.addFileAndSend(fileForm);
+  
+  }
+ 
+  stopBtn.onclick = function(){
+    upload_instance.stop();
+  }
+  
+  startBtn.onclick = function(){
+    upload_instance.start();
+  }
+ 
+  function Upload(){
+
+    var xhr = new XMLHttpRequest();
+
+    //对外方法，传入文件对象
+    this.addFileAndSend = function(that){
+        if(is_upload==0){
+            alert("请上传文件");
+            return;
+        }
+        if(md5filename.length==0){
+            alert("文件太大，正在计算文件md5值，请稍等");
+            return;
+        }
+      file = that.files[0];
+
+      blob = cutFile(file);
+      sendFile(blob,file);
+      blob_num += 1;
+    }
+    //停止文件上传
+    this.stop = function(){
+      xhr.abort();
+      is_stop = 1;
+    }
+    
+    this.start = function(){
+      sendFile(blob,file);  
+      is_stop = 0;
+    }
+
+    //切割文件
+    function cutFile(file){
+      var file_blob = file.slice(start,end);
+      start = end;
+      end = start + LENGTH;
+      return file_blob;
+    };
+    //发送文件
+    function sendFile(blob,file){
+
+      var total_blob_num = Math.ceil(file.size / LENGTH);
+      console.log(total_blob_num);
+      var form_data = new FormData();
+      form_data.append('file',blob);
+      form_data.append('blob_num',blob_num);
+      form_data.append('total_blob_num',total_blob_num);
+      form_data.append('md5_file_name',md5filename);
+      form_data.append('file_name',file.name);
+
+
+
+      xhr.open('POST','./test.php',false);
+      
+      xhr.onreadystatechange = function () {
+        console.log( xhr.responseText);
+        var progress;
+        var progressObj = document.getElementById('finish');
+        if(total_blob_num == 1){
+          progress = '100%';
+        }else{
+          progress = (Math.min(100,(blob_num/total_blob_num)* 100 )).toFixed(2) +'%';
+        }
+        console.log('progress-----'+progress);
+        progressObj.style.width = progress;
+        rate.innerHTML = progress;
+        
+        var t = setTimeout(function(){
+          if(start < file.size && is_stop === 0){
+            blob = cutFile(file);
+            sendFile(blob,file);
+            blob_num += 1;
+          }else{
+
+            //setTimeout(t);
+          }
+        },1000);
+      }
+
+      var result= xhr.send(form_data);
+      console.log(result);
+    }
+  }
+ 
+</script>
+</body>
+</html>
